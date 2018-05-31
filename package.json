@@ -8,12 +8,9 @@
   "scripts": {
     "start": "nodemon"
   },
-  "dependencies": {
-    "@types/lodash": "^4.14.109",
-    "lodash": "^4.17.10"
-  },
   "devDependencies": {
     "@types/node": "^10.1.4",
+    "ts-loader": "^4.3.0",
     "typescript": "^2.8.4"
   }
 }

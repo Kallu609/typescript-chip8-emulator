@@ -1,6 +1,6 @@
 import * as fs from 'fs';
-import * as _ from 'lodash';
 import * as path from 'path';
+import { arrChunk } from './lib/helpers';
 
 const ROM_DIR = path.join(__dirname, 'roms');
 const MEMORY_DUMP_PATH = path.join(__dirname, 'memorydump.hex');
@@ -152,10 +152,19 @@ class Chip8 {
 
       case 0xC000: // Sets VX to the result of a bitwise and operation on a random number.
         break;
-
+      */
       case 0xD000: // Draws a sprite at coordinate (VX, VY)
+        // TODO
+        console.log(
+          `[${hexRepr}] Drawing sprite to ` + 
+          `(V${ (opcode & 0xF00) >> 8 }: ${ this.V[(opcode & 0xF00) >> 8] }, ` +
+          `V${ (opcode & 0x0F0) >> 4 }: ${ this.V[(opcode & 0x0F0) >> 4] }) ` +
+          `with height of ${ opcode & 0x00F }`);
+
+        this.pc += 2;
         break;
-        
+
+      /*
       case 0xE000:
         break;
 
@@ -176,7 +185,7 @@ class Chip8 {
       return byte.toString(16).padStart(2, '0');
     });
     
-    const chunks = _.chunk(hexBytes, 16);
+    const chunks = arrChunk(hexBytes, 16);
     const lines = chunks.map(chunk => chunk.join(' '));
 
     const dumpText = lines.join('\n');
