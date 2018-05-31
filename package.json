@@ -1,0 +1,19 @@
+{
+  "name": "typescript-chip8-emulator",
+  "version": "1.0.0",
+  "main": "src/app.ts",
+  "repository": "https://github.com/Kallu609/typescript-chip8-emulator.git",
+  "author": "Kallu609 <khirvola@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "start": "nodemon"
+  },
+  "dependencies": {
+    "@types/lodash": "^4.14.109",
+    "lodash": "^4.17.10"
+  },
+  "devDependencies": {
+    "@types/node": "^10.1.4",
+    "typescript": "^2.8.4"
+  }
+}
