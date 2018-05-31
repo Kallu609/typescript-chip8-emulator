@@ -41,7 +41,7 @@ class Chip8 {
 
   constructor() {
     this.initialize();
-    this.loadRom('TETRIS');
+    this.loadRom('PONG');
     this.emulationLoop();
   }
 
@@ -63,6 +63,11 @@ class Chip8 {
     this.loadFontset();
   }
 
+  log(opcode: number, text: string): void {
+    const hexRepr = '0x' + (opcode).toString(16).toUpperCase().padStart(4, '0');
+    console.log(`${hexRepr}   ${text}`);
+  }
+  
   loadFontset(): void {
     // Fontset starts from 0x00 (?)
     FONTSET.forEach((byte, i) => {
@@ -99,14 +104,13 @@ class Chip8 {
   emulateCycle(): void {
     // Fetch Opcode
     const opcode = this.memory[this.pc] << 8  | this.memory[this.pc + 1];
-    const hexRepr = '0x' + (opcode).toString(16).toUpperCase().padStart(4, '0');
     
     // Decode & execute Opcode
     switch (opcode & 0xF000) {
       case 0x0000:
         switch (opcode & 0x00FF) {
           case 0x00E0: // Clears the screen.
-            console.log(`[${hexRepr}] Clear the screen`);
+            this.log(opcode, `Clear the screen`);
             break;
 
           case 0x00EE: // Returns from a subroutine
@@ -114,11 +118,11 @@ class Chip8 {
             this.pc = this.stack[this.sp];
             this.pc += 2;
             
-            console.log(`[${hexRepr}] Return from subroutine (sp: ${this.sp})\n`);
+            this.log(opcode, `Return from subroutine (sp: ${this.sp})\n`);
             break;
 
           default:
-            console.log(`Unknown opcode: ${ hexRepr }`);
+            this.log(opcode, 'Unknown opcode');
             process.exit();
         }
         break;
@@ -126,193 +130,200 @@ class Chip8 {
       case 0x1000: // Jumps to address NNN.
         this.pc = opcode & 0x0FFF;
         
-        console.log(`[${hexRepr}] Goto 0x0${ opcode & 0x0FFF }`);
+        this.log(opcode, `Goto 0x0${ opcode & 0x0FFF }`);
         break;
         
-      case 0x2000: // Calls subroutine at NNN.
+      case 0x2000: { // Calls subroutine at NNN.
+        const nnn = opcode & 0x0FFF;
         this.stack[this.sp] = this.pc;
         this.sp++;
-        this.pc = opcode & 0x0FFF;
+        this.pc = nnn;
         
-        const callAddress = `0x${ (opcode & 0x0FFF).toString(16).toUpperCase().padStart(4, '0') }`;
-        console.log(`[${hexRepr}] Subroutine call to ${callAddress} (sp: ${this.sp})\n`);
-        break;
+        const callAddress = `0x${ nnn.toString(16).toUpperCase().padStart(4, '0') }`;
+        this.log(opcode, `Subroutine call to ${callAddress} (sp: ${this.sp})\n`);
+      } break;
       
-      case 0x3000: // Skips the next instruction if VX equals NN.
-        if (this.V[(opcode & 0x0F00) >> 8] === (opcode & 0x00FF)) {
+      case 0x3000: { // Skips the next instruction if VX equals NN.
+        const x = (opcode & 0x0F00) >> 8;
+        const nn = (opcode & 0x00FF);
+
+        if (this.V[x] === nn) {
           this.pc += 4;
         } else {
           this.pc += 2;
         }
 
-        console.log(`[${hexRepr}] Skip if V${(opcode & 0x0F00) >> 8} == ${ (opcode & 0x00FF) }`);
-        break;
+        this.log(opcode, `Skip if V${x} == ${nn}`);
+      } break;
       
-      case 0x4000: // Skips the next instruction if VX doesn't equal NN.
-        if (this.V[(opcode & 0x0F00) >> 8] !== (opcode & 0x00FF)) {
+      case 0x4000: { // Skips the next instruction if VX doesn't equal NN.
+        const x = (opcode & 0x0F00) >> 8;
+        const nn = (opcode & 0x00FF);
+
+        if (this.V[x] !== nn) {
           this.pc += 4;
         } else {
           this.pc += 2;
         }
 
-        console.log(`[${hexRepr}] Skip if V${(opcode & 0x0F00) >> 8} != ${ (opcode & 0x00FF) }`);
-        break;
+        this.log(opcode, `Skip if V${(opcode & 0x0F00) >> 8} != ${ (opcode & 0x00FF) }`);
+      } break;
       
-      case 0x5000: // Skips the next instruction if VX equals VY.
-        const equal = (opcode & 0x0F00 >> 8) === (opcode & 0x00F0 >> 4);
+      case 0x5000: { // Skips the next instruction if VX equals VY.
+        const x = (opcode & 0x0F00 >> 8);
+        const y = (opcode & 0x00F0 >> 4);
+        const equal = this.V[x] === this.V[y];
+
         if (equal) {
           this.pc += 4;
         } else {
           this.pc += 2;
         }
         
-        console.log(`[${hexRepr}] if(X==Y) -> ${equal}`);
-        break;
+        this.log(opcode, `if(X==Y) -> ${equal}`);
+      } break;
       
-      case 0x6000: // Sets 0x0F00 to 0x00FF.
-        this.V[(opcode & 0x0F00) >> 8] = opcode & 0x00FF;
+      case 0x6000: { // Sets VX to NN.
+        const x = (opcode & 0x0F00) >> 8;
+        const nn = opcode & 0x00FF;
+
+        this.V[x] = nn;
         this.pc += 2;
 
-        console.log(`[${ hexRepr }] Set V${ (opcode & 0x0F00) >> 8 } to ${ opcode & 0x00FF }`);
-        break;
+        this.log(opcode, `Set V${x} to ${nn}`);
+      } break;
 
-      case 0x7000: // Adds NN to VX. (Carry flag is not changed)
-        this.V[(opcode & 0x0F00) >> 8] += opcode & 0x00FF;
+      case 0x7000: { // Adds NN to VX. (Carry flag is not changed)
+        const x = (opcode & 0x0F00) >> 8;
+        const nn = opcode & 0x00FF;
+
+        this.V[x] += nn;
         this.pc += 2;
 
-        console.log(`[${hexRepr}] Add ${ opcode & 0x00FF } to V${ (opcode & 0x0F00) >> 8 }`);
-        break;
+        this.log(opcode, `Add ${ nn } to V${x}`);
+      } break;
       
-      case 0x8000: // Arithmetic
+      case 0x8000: { // Arithmetic
+        const x = (opcode & 0x0F00) >> 8;
+        const y = (opcode & 0x00F0) >> 4;
+
         switch (opcode & 0x000F) {
           case 0x0000: // Sets VX to the value of VY.
-            this.V[(opcode & 0x0F00) >> 8] = this.V[(opcode & 0x00F0) >> 4];
+            this.V[x] = this.V[y];
             this.pc += 2;
 
-            console.log(`[${hexRepr}] Set V${ (opcode & 0x0F00) >> 8 } to V${ (opcode & 0x00F0) >> 4 }`);
+            this.log(opcode, `Set V${x} to V${y}`);
             break;
 
           case 0x0001: // Sets VX to VX or VY. (Bitwise OR operation)
-            this.V[(opcode & 0x0F00) >> 8] = this.V[(opcode & 0x0F00) >> 8] | this.V[(opcode & 0x00F0) >> 4];
+            this.V[x] = this.V[x] | this.V[y];
             this.pc += 2;
 
-            console.log(
-              `[${hexRepr}] Set V${ (opcode & 0x0F00) >> 8 } to ` + 
-              `V${ (opcode & 0x0F00) >> 8 } | V${ (opcode & 0x00F0) >> 4 }`
-            );
+            this.log(opcode, `Set V${x} to V${x} | V${y}`);
             break;
 
           case 0x0002: // Sets VX to VX and VY. (Bitwise AND operation)
-            this.V[(opcode & 0x0F00) >> 8] = this.V[(opcode & 0x0F00) >> 8] & this.V[(opcode & 0x00F0) >> 4];
+            this.V[x] = this.V[x] & this.V[y];
             this.pc += 2;
 
-            console.log(
-              `[${hexRepr}] Set V${ (opcode & 0x0F00) >> 8 } to ` + 
-              `V${ (opcode & 0x0F00) >> 8 } & V${ (opcode & 0x00F0) >> 4 }`
-            );
+            this.log(opcode, `Set V${x} to V${x} & V${y}`);
             break;
 
           case 0x0003: // Sets VX to VX xor VY.
-            this.V[(opcode & 0x0F00) >> 8] = this.V[(opcode & 0x0F00) >> 8] ^ this.V[(opcode & 0x00F0) >> 4];
+            this.V[x] = this.V[x] ^ this.V[y];
             this.pc += 2;
 
-            console.log(
-              `[${hexRepr}] Set V${ (opcode & 0x0F00) >> 8 } to ` + 
-              `V${ (opcode & 0x0F00) >> 8 } ^ V${ (opcode & 0x00F0) >> 4 }`
-            );
+            this.log(opcode, `Set V${x} to V${x} ^ V${y}`);
             break;
 
           case 0x0004: // Adds VY to VX. VF is set to 1 when there's a carry, and to 0 when there isn't.
-            this.V[0xF] = Number((this.V[(opcode & 0x0F00) >> 8] -= this.V[(opcode & 0x00F0) >> 4]) > 255);
+            this.V[0xF] = Number((this.V[x] += this.V[y]) > 255);
             this.pc += 2;
 
-            console.log(`[${hexRepr}] Add V${ (opcode & 0x00F0) >> 4 } to V${ (opcode & 0x0F00) >> 4 }`);
+            this.log(opcode, `Add V${y} to V${x}`);
             break;
 
           case 0x0005: // VY is subtracted from VX. VF is set to 0 when there's a borrow, and 1 when there isn't.
-            this.V[0xF] = Number((this.V[(opcode & 0x0F00) >> 8] -= this.V[(opcode & 0x00F0) >> 4]) < 0);
+            this.V[0xF] = Number((this.V[x] -= this.V[y]) < 0);
             this.pc += 2;
 
+            this.log(opcode, `Substract V${y} to V${x}`);
             break;
 
           case 0x0006: // Shifts VY right by one and stores the result to VX (VY remains unchanged).
-                       // VF is set to the value of the least significant bit of VY before the shift.
-                       // (On some modern interpreters, VX is shifted instead, while VY is ignored.)
-            this.V[0xF] = (this.V[(opcode & 0x00F0) >> 4] & 0x1);
-            this.V[(opcode & 0x0F00) >> 8] = (this.V[(opcode & 0x00F0) >> 4] >> 1);
+                         // VF is set to the value of the least significant bit of VY before the shift.
+                         // (On some modern interpreters, VX is shifted instead, while VY is ignored.)
+            this.V[0xF] = (this.V[y] & 0x1);
+            this.V[x] = (this.V[y] >> 1);
             this.pc += 2;
             
-            console.log(`[${hexRepr}] V${ (opcode & 0x0F00) >> 8 } to V${ (opcode & 0x00F0) >> 4 } >> 1`);
+            this.log(opcode, `V${x} to V${y} >> 1`);
             break;
             
           case 0x0007: // Sets VX to VY minus VX. VF is set to 0 when there's a borrow, and 1 when there isn't.
-            this.V[0xF] = Number((this.V[(opcode & 0x0F00) >> 8] -=
-                                 (this.V[(opcode & 0x00F0) >> 4]) - this.V[(opcode & 0x0F00) >> 8]) < 0);
+            this.V[0xF] = Number((this.V[x] -= (this.V[y]) - this.V[x]) < 0);
             this.pc += 2;
 
-            console.log(`
-              [${hexRepr}] V${ (opcode & 0x0F00) >> 8 } to ` +
-              `V${ (opcode & 0x0F00) >> 8 } - V${ (opcode & 0x0F00) >> 4 }`
-            );
+            this.log(opcode, `V${x} to V${x} - V${y}`);
             break;
           
           case 0x000E: // Shifts VY left by one and copies the result to VX.
                        // VF is set to the value of the most significant bit of VY before the shift
-            this.V[0xF] = (this.V[(opcode & 0x00F0) >> 4]) >> 7;
-            this.V[(opcode & 0x00F0) >> 4] = this.V[(opcode & 0x00F0) >> 4] << 1;
-            this.V[(opcode & 0x0F00) >> 8] = this.V[(opcode & 0x00F0) >> 4];
+            this.V[0xF] = (this.V[y]) >> 7;
+            this.V[y] = this.V[y] << 1;
+            this.V[x] = this.V[y];
             this.pc += 2;
             
-            console.log(
-              `[${hexRepr}] V${ (opcode & 0x0F00) >> 8 } to ` +
-              `V${ (opcode & 0x00F0) >> 4 } = V${ (opcode & 0x00F0) >> 4 } << 1`
-            );
+            this.log(opcode, `V${x} to V${y} = V${y} << 1`);
             break;
 
           default:
-            console.log(`Unknown opcode: ${ hexRepr }`);
+            this.log(opcode, 'Unknown opcode');
             process.exit();
         }
-        break;
+      } break;
       
-      case 0x9000: // Skips the next instruction if VX doesn't equal VY.
-        if (this.V[(opcode & 0x0F00) >> 8] !== this.V[(opcode & 0x00F0 >> 4)]) {
+      case 0x9000: { // Skips the next instruction if VX doesn't equal VY.
+        const x = (opcode & 0x0F00) >> 8;
+        const y = (opcode & 0x00F0 >> 4);
+
+        if (this.V[x] !== this.V[y]) {
           this.pc += 4;
         } else {
           this.pc += 2;
         }
 
-        console.log(
-          `[${hexRepr}] Skip next if ` +
-          `V${ (opcode & 0x0F00) >> 8 } (${ this.V[(opcode & 0x0F00) >> 4] }) is not` +
-          `V${ (opcode & 0x0F00) >> 8 } (${ this.V[(opcode & 0x0F00) >> 4] })`
-        );
-        break;
+        this.log(opcode, `Skip next if V${x} (${ this.V[y] }) is not V${x} (${ this.V[y] })`);
+      } break;
         
-      case 0xA000: // Sets I to the address NNN.
-        this.I = opcode & 0x0FFF;
+      case 0xA000: { // Sets I to the address NNN.
+        const nnn = opcode & 0xFFF;
+
+        this.I = nnn;
         this.pc += 2;
 
-        console.log(`[${hexRepr}] Set I to ${ opcode & 0xFFF }`);
-        break;
+        this.log(opcode, `Set I to ${nnn}`);
+      } break;
 
-      case 0xB000: // Jumps to the address NNN plus V0.
-        this.pc = this.V[0] + (opcode & 0x0FFF);
+      case 0xB000: { // Jumps to the address NNN plus V0.
+        const nnn = opcode & 0xFFF;
+        this.pc = this.V[0] + nnn;
           
-        console.log(
-          `[${hexRepr}] Goto V0 + 0x0${ opcode & 0x0FFF } =>` +
-          `${ this.V[0] + (opcode & 0x0FFF) }`);
-        break;
+        this.log(opcode, `Goto V0 + 0x0${nnn} => ${ this.V[0] + nnn }`);
+      } break;
 
-      case 0xC000: // Sets VX to the result of a bitwise and operation on a random number.
+      case 0xC000: { // Sets VX to the result of a bitwise and operation on a random number.
+        const x = (opcode & 0x0F00) >> 8 ;
+        const nn = (opcode & 0x00FF);
         const random = Math.floor(Math.random() * 256);
-        this.V[(opcode & 0x0F00) >> 8] = (random & (opcode & 0x00FF));
+
+        this.V[x] = (random & nn);
         this.pc += 2;
 
-        console.log(`[${hexRepr}] Random to V${ (opcode & 0x0F00) >> 8 }: ${ random }`);
-        break;
+        this.log(opcode, `Random to V${x}: ${ random & nn }`);
+      } break;
       
-      case 0xD000: // Draws a sprite at coordinate (VX, VY)
+      case 0xD000: { // Draws a sprite at coordinate (VX, VY)
         const x = (opcode & 0x0F00) >> 8;
         const y = (opcode & 0x00F0) >> 4;
         const height = opcode & 0x000F;
@@ -338,138 +349,125 @@ class Chip8 {
         this.drawFlag = true;
         this.pc += 2;
         
-        console.log(
-          `[${hexRepr}] Drawing sprite to ` + 
-          `(V${ (opcode & 0x0F00) >> 8 }: ${ this.V[(opcode & 0x0F00) >> 8] }, ` +
-          `V${  (opcode & 0x00F0) >> 4 }: ${ this.V[(opcode & 0x00F0) >> 4] }) ` +
-          `with height of ${ opcode & 0x000F }`
-        );
-        break;
+        this.log(opcode, `Drawing sprite to (V${x}: ${ this.V[x] }, ` + 
+                     `V${y}: ${ this.V[y] }) with height of ${ height }`);
+      } break;
 
-      case 0xE000:
+      case 0xE000: {
+        const x = (opcode & 0x0F00) >> 8;
+
         switch (opcode & 0x00FF) {
           case 0x009E: // Skips the next instruction if the key stored in VX is pressed.
-            if (this.keys[(opcode & 0x0F00) >> 8] === 1) {
+            if (this.keys[x] === 1) {
               this.pc += 4;
             } else {
               this.pc += 2;
             }
 
-            console.log(
-              `[${hexRepr}] Skip next if keys[${ (opcode & 0x0F00) >> 8}] ` + 
-              `(Pressed: ${ this.keys[(opcode & 0x0F00) >> 8] === 1 }) is pressed.`
-            );
+            this.log(opcode, `Skip next if keys[${x}] (Pressed: ${ this.keys[x] === 1 }) is pressed.`);
             break;
 
           case 0x00A1: // Skips the next instruction if the key stored in VX isn't pressed.
-            if (this.keys[(opcode & 0x0F00) >> 8] === 0) {
+            if (this.keys[x] === 0) {
               this.pc += 4;
             } else {
               this.pc += 2;
             }
 
-            console.log(
-              `[${hexRepr}] Skip next if keys[${ (opcode & 0x0F00) >> 8}] ` + 
-              `(Pressed: ${ this.keys[(opcode & 0x0F00) >> 8] === 0 }) is not pressed.`
-            );
+            this.log(opcode, `Skip next if keys[${x}] (Pressed: ${ this.keys[x] === 0 }) is not pressed.`);
             break;
 
           default:
-            console.log(`Unknown opcode: ${ hexRepr }`);
+            this.log(opcode, 'Unknown opcode');
             process.exit();
         }
-        break;
+      } break;
 
-      case 0xF000:
+      case 0xF000: {
+        const x = (opcode & 0x0F00) >> 8;
+
         switch (opcode & 0x00FF) {  
           case 0x0007: // Sets Vx to the value of the delay timer
-            this.V[(opcode & 0x0F00) >> 8] = this.delayTimer;
+            this.V[x] = this.delayTimer;
             this.pc += 2;
             
-            console.log(
-              `[${hexRepr}] Set V${ ((opcode & 0x0F00) >> 8).toString(16) } to ` +
-              `value of the delay timer`
-            );
+            this.log(opcode, `Set V${ x.toString(16) } to value of the delay timer`);
             break;
             
           case 0x0015: // Sets the delay timer to VX.
             this.delayTimer = opcode & 0x0F00 >> 8;
             this.pc += 2;
             
-            console.log(`[${hexRepr}] Set delay timer to: ${ (opcode & 0x0F00) >> 8 }`);
+            this.log(opcode, `Set delay timer to: ${ x }`);
             break;
           
           case 0x0018: // Sets the sound timer to VX.
             this.soundTimer = opcode & 0x0F00 >> 8;
             this.pc += 2;
             
-            console.log(`[${hexRepr}] Set sound timer to: ${ (opcode & 0x0F00) >> 8 }`);
+            this.log(opcode, `Set sound timer to: ${ x }`);
             break;
           
           case 0x001E: // Adds VX to I.
-            this.I += this.V[(opcode & 0x0F00) >> 8];
+            this.I += this.V[x];
             this.pc += 2;
 
-            console.log( `[${hexRepr}] Add V${ (opcode & 0x0F00) >> 8 } to I`);
+            this.log(opcode, `Add V${ x } to I`);
             break;
 
           case 0x0029: // Sets I to the location of the sprite for the character in VX.
-            this.I = ((opcode & 0x0F00) >> 8) * 5;
+            this.I = x * 5;
             this.pc += 2;
             
-            console.log(
-              `[${hexRepr}] Set I to location of character sprite: ` + 
-              `${ ((opcode & 0x0F00) >> 8) * 5 }`
-            );
+            this.log(opcode, `Set I to location of character sprite: ${x * 5}`);
             break;
           
           case 0x0033: // Stores the binary-coded decimal representation of VX,
                        // with the most significant of three digits at the address in I,
                        // the middle digit at I plus 1, and the least significant digit at I plus 2.
                        // AKA: wat
-            this.memory[this.I] = this.V[(opcode & 0x0F00) >> 8] / 100;
-            this.memory[this.I + 1] = (this.V[(opcode & 0x0F00) >> 8] / 10) % 10;
-            this.memory[this.I + 2] = (this.V[(opcode & 0x0F00) >> 8] % 100) % 10;
+            this.memory[this.I] = this.V[x] / 100;
+            this.memory[this.I + 1] = (this.V[x] / 10) % 10;
+            this.memory[this.I + 2] = (this.V[x] % 100) % 10;
             this.pc += 2;
             
-            console.log(
-              `[${hexRepr}] ` + 
-              `I: ${ this.V[(opcode & 0x0F00) >> 8] / 100 }, ` + 
-              `I+1: ${ (this.V[(opcode & 0x0F00) >> 8] / 10) % 10 }, ` + 
-              `I+2: ${ (this.V[(opcode & 0x0F00) >> 8] % 100) % 10 }`
+            this.log(opcode, 
+              `I: ${ this.V[x] / 100 }, ` + 
+              `I + 1: ${ (this.V[x] / 10) % 10 }, ` + 
+              `I + 2: ${ (this.V[x] % 100) % 10 }`
             );
             break;
             
           case 0x0055: // Stores V0 to VX in memory starting at address I.
-            for (let i = 0; i <= ((opcode & 0x0F00) >> 8); i++) {
+            for (let i = 0; i <= x; i++) {
               this.memory[this.I + i] = this.V[i];
             }
             
-            this.I += ((opcode & 0x0F00) >> 8) + 1;
+            this.I += x + 1;
             this.pc += 2;
             
-            console.log(`[${hexRepr}] Dump registers`);
+            this.log(opcode, `Dump registers`);
             break;
             
           case 0x0065: // Fills V0 to VX with values from memory starting at address I.
-            for (let i = 0; i <= ((opcode & 0x0F00) >> 8); i++) {
+            for (let i = 0; i <= x; i++) {
               this.V[i] = this.memory[this.I + i];
             }
             
-            this.I += ((opcode & 0x0F00) >> 8) + 1;
+            this.I += (x) + 1;
             this.pc += 2;
  
-            console.log(`[${hexRepr}] Load registers V0 to V${ ((opcode & 0x0F00) >> 8) }`);
+            this.log(opcode, `Load registers V0 to V${x}`);
             break;
             
           default:
-            console.log(`Unknown opcode: ${ hexRepr }`);
+            this.log(opcode, 'Unknown opcode');
             process.exit();
         }
-        break;
+      } break;
 
       default:
-        console.log(`Unknown opcode: ${ hexRepr }`);
+        this.log(opcode, 'Unknown opcode');
         process.exit();
     }
 
