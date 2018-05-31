@@ -41,15 +41,15 @@ class Chip8 {
 
   constructor() {
     this.initialize();
-    this.loadRom('PONG');
+    this.loadRom('TETRIS');
     this.emulationLoop();
   }
 
   initialize(): void {
     this.memory = new Uint8Array(4096);
     this.pc = 0x200;
-    this.V  = new Uint8Array(16);
-    this.I  = 0;
+    this.V = new Uint8Array(16);
+    this.I = 0;
     this.stack = Array(16).fill(0);
     this.sp = 0;
 
@@ -101,7 +101,7 @@ class Chip8 {
     const opcode = this.memory[this.pc] << 8  | this.memory[this.pc + 1];
     const hexRepr = '0x' + (opcode).toString(16).toUpperCase().padStart(4, '0');
     
-    // Decode Opcode
+    // Decode & execute Opcode
     switch (opcode & 0xF000) {
       case 0x0000:
         switch (opcode & 0x00FF) {
@@ -399,14 +399,21 @@ class Chip8 {
             console.log(`[${hexRepr}] Set delay timer to: ${ (opcode & 0x0F00) >> 8 }`);
             break;
           
-          case 0x0018:
+          case 0x0018: // Sets the sound timer to VX.
             this.soundTimer = opcode & 0x0F00 >> 8;
             this.pc += 2;
             
             console.log(`[${hexRepr}] Set sound timer to: ${ (opcode & 0x0F00) >> 8 }`);
             break;
-            
-          case 0x0029: // Sets I to the location of the sprite for the character in VX
+          
+          case 0x001E: // Adds VX to I.
+            this.I += this.V[(opcode & 0x0F00) >> 8];
+            this.pc += 2;
+
+            console.log( `[${hexRepr}] Add V${ (opcode & 0x0F00) >> 8 } to I`);
+            break;
+
+          case 0x0029: // Sets I to the location of the sprite for the character in VX.
             this.I = ((opcode & 0x0F00) >> 8) * 5;
             this.pc += 2;
             
@@ -433,7 +440,7 @@ class Chip8 {
             );
             break;
             
-          case 0x0055: // Stores V0 to VX in memory starting at address I
+          case 0x0055: // Stores V0 to VX in memory starting at address I.
             for (let i = 0; i <= ((opcode & 0x0F00) >> 8); i++) {
               this.memory[this.I + i] = this.V[i];
             }
@@ -444,7 +451,7 @@ class Chip8 {
             console.log(`[${hexRepr}] Dump registers`);
             break;
             
-          case 0x0065: // Fills V0 to VX with values from memory starting at address I
+          case 0x0065: // Fills V0 to VX with values from memory starting at address I.
             for (let i = 0; i <= ((opcode & 0x0F00) >> 8); i++) {
               this.V[i] = this.memory[this.I + i];
             }
