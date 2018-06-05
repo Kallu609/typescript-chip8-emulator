@@ -1,9 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { arrChunk } from './lib/helpers';
-
-const ROM_DIR = path.join(__dirname, 'roms');
-const MEMORY_DUMP_PATH = path.join(__dirname, 'memorydump.hex');
 const FONTSET = [
   0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
   0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -42,7 +36,7 @@ class Chip8 {
   constructor() {
     this.initialize();
     this.loadRom('PONG');
-    this.emulationLoop();
+    // this.emulationLoop();
   }
 
   initialize(): void {
@@ -76,16 +70,16 @@ class Chip8 {
   }
 
   loadRom(romName: string): void {
-    const filePath = path.join(ROM_DIR, romName);
-    const buffer = fs.readFileSync(filePath);
+    window.fetch('roms/PONG')
+      .then(res => res.arrayBuffer())
+      .then(res => {
+        console.log(`ROM Size: ${ res.byteLength } bytes`);
+        console.log(res);
 
-    console.log(`ROM Size: ${ buffer.length } bytes`);
-
-    for (let i = 0; i < buffer.length; i++) {
-      this.memory[i + 512] = buffer[i];
-    }
-
-    this.dumpMemory();
+        for (let i = 0; i < res.byteLength; i++) {
+          this.memory[i + 512] = res[i];
+        }
+      });
   }
 
   emulationLoop(): void {
@@ -479,18 +473,6 @@ class Chip8 {
     if (this.soundTimer > 0) {
       this.soundTimer--;
     }
-  }
-
-  dumpMemory(): void {
-    const hexBytes = Array.from(this.memory).map(byte => {
-      return byte.toString(16).padStart(2, '0');
-    });
-    
-    const chunks = arrChunk(hexBytes, 16);
-    const lines = chunks.map(chunk => chunk.join(' '));
-
-    const dumpText = lines.join('\n');
-    fs.writeFileSync(MEMORY_DUMP_PATH, dumpText);
   }
 }
 
