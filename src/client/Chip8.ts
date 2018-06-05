@@ -33,13 +33,13 @@ class Chip8 {
   keys: Array<number>;    // Nibble per key 0x0 - 0xF
   frequency: number;      // Hz, original: 60Hz
 
+  stopExecution: boolean; // Flag to exit emulation loop
+
   constructor() {
     this.initialize();
-    this.loadRom('PONG');
-    // this.emulationLoop();
   }
 
-  initialize(): void {
+  async initialize(): Promise<void> {
     this.memory = new Uint8Array(4096);
     this.pc = 0x200;
     this.V = new Uint8Array(16);
@@ -51,10 +51,14 @@ class Chip8 {
     this.soundTimer = 0;
     
     this.gfx = new Array(2048).fill(0);
-    this.frequency = 60;
+    this.frequency = 5;
     this.keys = new Array(16).fill(0);
 
+    this.stopExecution = false;
+
     this.loadFontset();
+    await this.loadRom('PONG');
+    this.emulationLoop();
   }
 
   log(opcode: number, text: string): void {
@@ -69,20 +73,24 @@ class Chip8 {
     });
   }
 
-  loadRom(romName: string): void {
-    window.fetch('roms/PONG')
+  async loadRom(romName: string): Promise<void> {
+    await (await window.fetch('roms/PONG')
       .then(res => res.arrayBuffer())
       .then(res => {
-        console.log(`ROM Size: ${ res.byteLength } bytes`);
-        console.log(res);
-
-        for (let i = 0; i < res.byteLength; i++) {
-          this.memory[i + 512] = res[i];
+        const bytes = new Uint8Array(res);
+        console.log(`ROM Size: ${ bytes.byteLength } bytes`);
+        
+        for (let i = 0; i < bytes.length; i++) {
+          this.memory[i + 0x200] = bytes[i];
         }
-      });
+      }));
   }
 
   emulationLoop(): void {
+    if (this.stopExecution) {
+      return;
+    }
+
     const start = +new Date();
     this.emulateCycle();
     const now = +new Date();
@@ -117,7 +125,7 @@ class Chip8 {
 
           default:
             this.log(opcode, 'Unknown opcode');
-            process.exit();
+            this.stopExecution = true;
         }
         break;
       
@@ -273,7 +281,7 @@ class Chip8 {
 
           default:
             this.log(opcode, 'Unknown opcode');
-            process.exit();
+            this.stopExecution = true;
         }
       } break;
       
@@ -358,7 +366,7 @@ class Chip8 {
               this.pc += 2;
             }
 
-            this.log(opcode, `Skip next if keys[${x}] (Pressed: ${ this.keys[x] === 1 }) is pressed.`);
+            this.log(opcode, `Skip next if keys[${x}] (Pressed: ${ this.keys[x] === 1 }) is pressed`);
             break;
 
           case 0x00A1: // Skips the next instruction if the key stored in VX isn't pressed.
@@ -368,12 +376,12 @@ class Chip8 {
               this.pc += 2;
             }
 
-            this.log(opcode, `Skip next if keys[${x}] (Pressed: ${ this.keys[x] === 0 }) is not pressed.`);
+            this.log(opcode, `Skip next if keys[${x}] (Pressed: ${ this.keys[x] === 0 }) is not pressed`);
             break;
 
           default:
             this.log(opcode, 'Unknown opcode');
-            process.exit();
+            this.stopExecution = true;
         }
       } break;
 
@@ -456,13 +464,13 @@ class Chip8 {
             
           default:
             this.log(opcode, 'Unknown opcode');
-            process.exit();
+            this.stopExecution = true;
         }
       } break;
 
       default:
         this.log(opcode, 'Unknown opcode');
-        process.exit();
+        this.stopExecution = true;
     }
 
     // Update timers
@@ -474,6 +482,29 @@ class Chip8 {
       this.soundTimer--;
     }
   }
+
+  dumpMemory(): void {
+    const hexBytes = Array.from(this.memory).map(byte => {
+      return byte.toString(16).padStart(2, '0');
+    });
+    
+    const chunks = arrChunk(hexBytes, 16);
+    const lines = chunks.map(chunk => chunk.join(' '));
+
+    const dumpText = lines.join('\n');
+    console.log(dumpText);
+  }
+}
+
+function arrChunk(arr: Array<any>, len: number) {
+  const chunks = [];
+  let i = 0;
+
+  while (i < arr.length) {
+    chunks.push(arr.slice(i, i += len));
+  }
+
+  return chunks;
 }
 
 export default Chip8;

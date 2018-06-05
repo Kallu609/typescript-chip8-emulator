@@ -1,8 +1,6 @@
 const path = require('path');
 const webpack = require('webpack');
 
-// process.noDeprecation = true;
-
 module.exports = {
   mode: 'development',
   entry: {
@@ -10,7 +8,7 @@ module.exports = {
   },
   output: {
     filename: '[name].js',
-    path: path.resolve(__dirname, 'src/client/public')
+    path: path.resolve(__dirname, 'src/public')
   },
   module: {
     rules: [
